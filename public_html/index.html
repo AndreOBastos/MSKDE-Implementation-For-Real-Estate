@@ -1,0 +1,342 @@
+<!doctype html>
+<!--[if lt IE 7]>      <html class="no-js lt-ie9 lt-ie8 lt-ie7" lang=""> <![endif]-->
+<!--[if IE 7]>         <html class="no-js lt-ie9 lt-ie8" lang=""> <![endif]-->
+<!--[if IE 8]>         <html class="no-js lt-ie9" lang=""> <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang=""> <!--<![endif]-->
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+        <title></title>
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+
+        <link rel="stylesheet" href="css/bootstrap.min.css">
+        <link rel="stylesheet" href="css/bootstrap-theme.min.css">
+        <link rel="stylesheet" href="css/main.css">
+        <link rel="stylesheet" href="css/leaflet.css">
+
+        <script src="js/vendor/modernizr-2.8.3-respond-1.4.2.min.js"></script>
+        <script src="js/leaflet.js"></script>
+        <script src = "https://ajax.googleapis.com/ajax/libs/jquery/2.1.3/jquery.min.js"></script>
+        <script src="https://d3js.org/d3.v5.min.js"></script>
+        <script src="//cdnjs.cloudflare.com/ajax/libs/topojson/1.6.9/topojson.min.js"></script>
+        
+        <!-- Desenhar mapa -->
+        
+        
+        <!-- Desenhar MSKDE -->
+        <script>
+            
+        </script>
+        <script>
+            $(document).ready(function(){
+               $.getJSON("imoveis-sample.json", function(jd){
+                  console.log(jd[0]); 
+               });
+            });
+        </script>
+    </head>
+    <body>
+        <div id="mapid"></div>
+        <script>
+            var map = L.map('mapid').setView([-3.783411, 321.48159], 12);
+            L.tileLayer('http://{s}.tile.osm.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="http://www.openstreetmap.org/">OpenStreetMap</a> contributors',
+                maxZoom: 17
+            }).addTo(map);
+            
+            //MSKDE
+            
+            function lookup(value, valueTL, valueTR, valueBL, valueBR){
+                if(valueTL >= value){
+                    if(valueTR >= value){
+                        if(valueBL >= value){
+                            if(valueBR >= value){
+                                return 0;
+                            } else{
+                                return 2;
+                            }
+                        } else{
+                            if(valueBR >= value){
+                                return 1;
+                            } else{
+                                return 3;
+                            }
+                        }                       
+                    } else {
+                        if(valueBL >= value){
+                            if(valueBR >= value){
+                                return 4;
+                            } else{
+                                return 6;
+                            }
+                        } else{
+                            if(valueBR >= value){
+                                return 5;
+                            } else{
+                                return 7;
+                            }
+                        }
+                    }
+                } else {
+                    if(valueTR >= value){
+                        if(valueBL >= value){
+                            if(valueBR >= value){
+                                return 8;
+                            } else{
+                                return 10;
+                            }
+                        } else{
+                            if(valueBR >= value){
+                                return 9;
+                            } else{
+                                return 11;
+                            }
+                        }                       
+                    } else {
+                        if(valueBL >= value){
+                            if(valueBR >= value){
+                                return 12;
+                            } else{
+                                return 14;
+                            }
+                        } else{
+                            if(valueBR >= value){
+                                return 13;
+                            } else{
+                                return 15;
+                            }
+                        }
+                    }
+                }
+            }
+           
+            
+            class Edge{
+                constructor(x1,y1,x2,y2){
+                    this.x1 = x1;
+                    this.y1 = y1;
+                    this.x2 = x2;
+                    this.y2 = y2;
+                }
+            }
+            
+            var num_linhas = 40;
+            var num_values = 5;
+            var cell_size_coord = (map.getBounds().getNorth() - map.getBounds().getSouth()) / num_linhas;
+            var cell_size_pix = $("#mapid").height() /num_linhas;
+            console.log(cell_size_pix);
+            
+            //var imoveis = imoveis na área do mapa
+            
+            
+            var circles = L.featureGroup();
+            var paths = L.featureGroup();
+            map.addLayer(circles);
+            
+            //Container onde será desenhado o Marching Squares.
+            var svgContainer = d3.select("#mapid").append("svg").attr("width", 600).attr("height", 600);
+            
+            map.on('move', function(e){              
+               cell_size_coord = (map.getBounds().getNorth() - map.getBounds().getSouth()) / num_linhas;
+               circles.clearLayers();
+               
+               //Create an array with the longitude and latitude of each cell
+               var LatLong = [];
+               for(i=1;i<=num_linhas;i++){
+                   LatLong[i] = [];
+                   for(j=1;j<=num_linhas;j++){
+                       var current_cell_pix_i = (cell_size_pix/2) + (i-1)*cell_size_pix;
+                       var current_cell_pix_j = (cell_size_pix/2) + (j-1)*cell_size_pix;
+                       
+                       var cell_coord = map.containerPointToLatLng([current_cell_pix_i,current_cell_pix_j]);
+                       LatLong[i][j] = (cell_coord);
+                    }
+                }
+                
+                //Create an array with the calculated values for KDE for each cell
+                var values = [];
+                for(i=1;i<=num_linhas;i++){
+                    values[i] = [];
+                    for(j=1;j<=num_linhas;j++){
+                        values[i][j] = (Math.floor((Math.random()*num_values)+1));
+                    }
+                }
+                
+                function topLeft(row,column){
+                    if (row === 1 || column === 1){
+                        return 0;
+                    }
+                    return (values[row-1][column-1]+values[row-1][column]+values[row][column-1]+values[row][column])/4;
+                }
+                function topRight(row,column){
+                    if (row === 1 || column === num_linhas){
+                        return 0;
+                    }
+                    return (values[row-1][column]+values[row-1][column+1]+values[row][column]+values[row][column+1])/4;
+                }
+                function bottomLeft(row,column){
+                    if (row === num_linhas || column === 1){
+                        return 0;
+                    }
+                    return (values[row][column-1]+values[row][column]+values[row+1][column-1]+values[row+1][column])/4;
+                }
+                function bottomRight(row,column){
+                    if (row === num_linhas || column === num_linhas){
+                        return 0;
+                    }
+                    return (values[row][column]+values[row][column+1]+values[row+1][column]+values[row+1][column+1])/4;
+                }
+                
+                function marchingSquares(rows, columns, value){
+                    var edge_array = [];
+                    for(i=1;i<=rows;i++){
+                        for(j=1;j<=columns;j++){
+                            var caso = lookup(value,topLeft(i,j),topRight(i,j),bottomLeft(i,j),bottomRight(i,j));
+
+                            switch(caso){
+                                case 1:
+                                    var edge = new Edge(cell_size_pix*(j-1), cell_size_pix*(i-0.5),cell_size_pix*(j-0.5), cell_size_pix*i);
+                                    edge_array.push(edge);
+                                    break;
+                                case 2:
+                                    var edge = new Edge(cell_size_pix*(j-0.5), cell_size_pix*i,cell_size_pix*j, cell_size_pix*(i-0.5));
+                                    edge_array.push(edge);
+                                    break;
+                                case 3:
+                                    var edge = new Edge(cell_size_pix*(j-1), cell_size_pix*(i-0.5),cell_size_pix*j, cell_size_pix*(i-0.5));
+                                    edge_array.push(edge);
+                                    break;
+                                case 4:
+                                    var edge = new Edge(cell_size_pix*(j-0.5), cell_size_pix*(i-1),cell_size_pix*j, cell_size_pix*(i-0.5));
+                                    edge_array.push(edge);
+                                    break;
+                                case 5:
+                                    if((topLeft(i,j)+topRight(i,j)+bottomLeft(i,j)+bottomRight(i,j))/4 < value){
+                                        var edge = new Edge(cell_size_pix*(j-1), cell_size_pix*(i-0.5),cell_size_pix*(j-0.5), cell_size_pix*(i-1));
+                                        edge_array.push(edge);
+                                        var edge2 = new Edge(cell_size_pix*(j-0.5), cell_size_pix*i,cell_size_pix*j, cell_size_pix*(i-0.5));
+                                        edge_array.push(edge2);
+                                    } else {
+                                        var edge = new Edge(cell_size_pix*(j-1), cell_size_pix*(i-0.5),cell_size_pix*(j-0.5), cell_size_pix*i);
+                                        edge_array.push(edge);
+                                        var edge2 = new Edge(cell_size_pix*(j-0.5), cell_size_pix*(i-1),cell_size_pix*j, cell_size_pix*(i-0.5));
+                                        edge_array.push(edge2);
+                                    }
+                                    break;
+                                case 6:
+                                    var edge = new Edge(cell_size_pix*(j-0.5), cell_size_pix*(i-1),cell_size_pix*(j-0.5), cell_size_pix*i);
+                                    edge_array.push(edge);
+                                    break;
+                                case 7:
+                                    var edge = new Edge(cell_size_pix*(j-1), cell_size_pix*(i-0.5),cell_size_pix*(j-0.5), cell_size_pix*(i-1));
+                                    edge_array.push(edge);
+                                    break;
+                                case 8:
+                                    var edge = new Edge(cell_size_pix*(j-1), cell_size_pix*(i-0.5),cell_size_pix*(j-0.5), cell_size_pix*(i-1));
+                                    edge_array.push(edge);
+                                    break;
+                                case 9:
+                                    var edge = new Edge(cell_size_pix*(j-0.5), cell_size_pix*(i-1),cell_size_pix*(j-0.5), cell_size_pix*i);
+                                    edge_array.push(edge);
+                                    break;
+                                case 10:
+                                    if((topLeft(i,j)+topRight(i,j)+bottomLeft(i,j)+bottomRight(i,j))/4 < value){
+                                        var edge = new Edge(cell_size_pix*(j-1), cell_size_pix*(i-0.5),cell_size_pix*(j-0.5), cell_size_pix*i);
+                                        edge_array.push(edge);
+                                        var edge2 = new Edge(cell_size_pix*(j-0.5), cell_size_pix*(i-1),cell_size_pix*j, cell_size_pix*(i-0.5));
+                                        edge_array.push(edge2);
+                                    } else {
+                                        var edge = new Edge(cell_size_pix*(j-1), cell_size_pix*(i-0.5),cell_size_pix*(j-0.5), cell_size_pix*(i-1));
+                                        edge_array.push(edge);
+                                        var edge2 = new Edge(cell_size_pix*(j-0.5), cell_size_pix*i,cell_size_pix*j, cell_size_pix*(i-0.5));
+                                        edge_array.push(edge2);
+                                    }
+                                    break;
+                                case 11:
+                                    var edge = new Edge(cell_size_pix*(j-0.5), cell_size_pix*(i-1),cell_size_pix*j, cell_size_pix*(i-0.5));
+                                    edge_array.push(edge);
+                                    break;
+                                case 12:
+                                    var edge = new Edge(cell_size_pix*(j-1), cell_size_pix*(i-0.5),cell_size_pix*j, cell_size_pix*(i-0.5));
+                                    edge_array.push(edge);
+                                    break;
+                                case 13:
+                                    var edge = new Edge(cell_size_pix*(j-0.5), cell_size_pix*i,cell_size_pix*j, cell_size_pix*(i-0.5));
+                                    edge_array.push(edge);
+                                    break;
+                                case 14:
+                                    var edge = new Edge(cell_size_pix*(j - 1), cell_size_pix*(i-0.5),cell_size_pix*(j - 0.5), cell_size_pix*i);
+                                    edge_array.push(edge);
+                                    break;
+                            }
+                        }
+                    }
+                    return edge_array;
+                }
+                
+                //Calculate value for each cell
+                function calculateValue(element,index,array){
+                    
+                }
+                
+                //LatLong.forEach(calculateValue);
+                
+                //create Marching Squares data array for each value
+                var march_values = [];
+                for(i=0; i < num_values; i++){
+                    march_values[i] = [];
+                    for(j=0; j<= num_linhas-1; j++){
+                        march_values[i][j] = [];
+                        for(k=0; k<=num_linhas-1; k++){
+                            march_values[i][j][k]  = lookup(i+1,
+                                                    values[(j*k)+k],
+                                                    values[(j*k)+k+1],
+                                                    values[((j+1)*k)+k],
+                                                    values[((j+1)*k)+k+1]);
+                        }
+                    }
+                }
+                
+                for(i=1;i<=num_linhas;i++){
+                    for(j=1;j<=num_linhas;j++){
+                        if(values[i][j] === 1)
+                            var adicionar = L.circle([LatLong[i][j].lat,LatLong[i][j].lng],100, {color: '#ffe6e6', weight: 2, fillColor: '#fecc5c', fillOpacity: 0.5}).addTo(circles);
+                        if(values[i][j] === 2)
+                            var adicionar = L.circle([LatLong[i][j].lat,LatLong[i][j].lng],100, {color: '#ffb3b3', weight: 2, fillColor: '#fecc5c', fillOpacity: 0.5}).addTo(circles);
+                        if(values[i][j] === 3)
+                            var adicionar = L.circle([LatLong[i][j].lat,LatLong[i][j].lng],100, {color: '#ff8080', weight: 2, fillColor: '#fecc5c', fillOpacity: 0.5}).addTo(circles);
+                        if(values[i][j] === 4)
+                            var adicionar = L.circle([LatLong[i][j].lat,LatLong[i][j].lng],100, {color: '#ff4d4d', weight: 2, fillColor: '#fecc5c', fillOpacity: 0.5}).addTo(circles);
+                        if(values[i][j] === 5)
+                            var adicionar = L.circle([LatLong[i][j].lat,LatLong[i][j].lng],100, {color: '#ff0000', weight: 2, fillColor: '#fecc5c', fillOpacity: 0.5}).addTo(circles);
+                    }
+                }
+                
+                paths.clearLayers();
+                
+                for(i=0;i<num_values;i++){
+                    marchingSquares(num_linhas, num_linhas, i+1);
+                }
+                
+                /*for(i=0;i<num_values;i++){
+                    var edge_array = new Array();
+                    for(j=0;j<num_linhas;j++){
+                        for(k=0; k<=num_linhas-1; k++){
+                            var edge = edgeDraw(march_values[i][(j*k)+k],
+                                    (cell_size_pix/2) + k*cell_size_pix,
+                                    (cell_size_pix/2) + j*cell_size_pix);
+                            if(edge){
+                                edge_array.push(edge);
+                            }
+                        }
+                    }
+                }*/
+                
+                
+                
+                
+            });
+        </script>
+    </body>
+</html>
